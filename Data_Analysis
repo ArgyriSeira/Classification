@@ -1,0 +1,336 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import random
+from datetime import datetime
+
+
+users = pd.read_csv('users.csv', delimiter=',')
+users.drop(columns=['city', 'num_referrals', 'num_successful_referrals'], inplace=True)
+users.fillna(0, inplace=True)
+users['user_id'] = users['user_id'].str.extract('(\d+)', expand=True).astype(int)
+users['age'] = datetime.now().year - users['birth_year']
+gens = []
+for age in users['age']:
+    if age in [74, 91]:
+        gen ='silent_gen'
+    elif age in [55, 73]:
+        gen = 'baby_boomers_gen'
+    elif age in [39, 54]:
+        gen = 'gen_x'
+    elif age in [23, 38]:
+        gen = 'mil_gen'
+    else:
+        gen = 'gen_z'
+    gens.append(gen)
+users['gen'] = gens
+
+
+
+gdp_total = []
+for country in users['country']:
+    if country in ['GB', 'PL', 'FR', 'ES', 'DE', 'CH', 'IT', 'NL', 'BE', 'SE', 'NO', 'AT', 'AU']:
+        gdp = 'high_GDP'
+    elif country in ['IE', 'RO', 'LT', 'PT', 'CZ', 'GR', 'HU', 'BG', 'DK', 'SI', 'SK', 'HR', 'FI', 'LU']:
+        gdp = 'medium_GDP'
+    elif country in ['MT', 'CY', 'LV', 'JE', 'GI', 'EE', 'GG', 'GP', 'IM', 'RE', 'IS', 'LI', 'MQ']:
+        gdp = 'low_GDP'
+    gdp_total.append(gdp)
+
+users['gdp'] = gdp_total
+
+
+# NOTIFICATIONS
+notifications = pd.read_csv('notifications.csv', delimiter=',')
+notifications = notifications[notifications['reason'] != 'SILVER_ENGAGEMENT_FEES_SAVED']
+notifications = notifications[notifications['reason'] != 'SILVER_ENGAGEMENT_INACTIVE_CARD']
+notifications['user_id'] = notifications['user_id'].str.extract('(\d+)', expand=True).astype(int)
+
+created_date_new_not = []
+for cr_date in notifications['created_date']:
+    date_new = datetime.strptime(cr_date, "%Y-%m-%d %H:%M:%S.%f")
+    created_date_new_not.append(date_new)
+notifications['created_date'] = created_date_new_not
+notifications['created_date'] = notifications['created_date'].dt.date
+
+users_notifications = notifications['user_id'].value_counts()
+
+user_notif = []
+for user in users['user_id']:
+    if user in users_notifications:
+        notif = users_notifications[user]
+    else:
+        notif = 0
+    user_notif.append(notif)
+users['notifications'] = user_notif
+
+
+# TRANSACTIONS
+
+transactions_1 = pd.read_csv('transactions_1.csv')
+transactions_2 = pd.read_csv('transactions_2.csv')
+transactions_3 = pd.read_csv('transactions_3.csv')
+transactions = transactions_1.append(transactions_2).append(transactions_3)
+transactions = transactions[transactions['transactions_type'] != 'CASHBACK']
+transactions['ea_cardholderpresence'].fillna(0, inplace=True)
+transactions['ea_merchant_mcc'].fillna(0, inplace=True)
+transactions.drop(columns=['ea_merchant_city'], inplace=True)
+transactions['ea_merchant_country'].fillna(0, inplace=True)
+transactions['user_id'] = transactions['user_id'].str.extract('(\d+)', expand=True).astype(int)
+created_date_new_trans = []
+for cr_date in transactions['created_date']:
+    date_new = datetime.strptime(cr_date, "%Y-%m-%d %H:%M:%S.%f")
+    created_date_new_trans.append(date_new)
+transactions['created_date'] = created_date_new_trans
+transactions['created_date'] = transactions['created_date'].dt.date
+users_transactions = transactions['user_id'].value_counts()
+user_trans = []
+for user in users['user_id']:
+    if user in users_transactions:
+        trans = users_transactions[user]
+    else:
+        trans = 0
+    user_trans.append(trans)
+users['transactions'] = user_trans
+users = users[users['transactions'] < 2300]
+
+# DEVICES
+devices = pd.read_csv('devices.csv')
+brand_clean = []
+for i in devices['brand']:
+    if i == 'Unknown':
+        brand_new = random.choice(['Android', 'Apple'])
+    else:
+        brand_new = i
+    brand_clean.append(brand_new)
+devices['brand_clean'] = brand_clean
+
+users['device'] = devices['brand_clean']
+mapping = {'Apple': 1, 'Android': 0}
+
+
+def map_devices(x):
+    if x in mapping:
+        return mapping[x]
+    else:
+        return x
+
+
+users['device'] = users['device'].apply(map_devices)
+
+####
+
+created_date_new = []
+for cr_date in users['created_date']:
+    date_new = datetime.strptime(cr_date, "%Y-%m-%d %H:%M:%S.%f")
+    created_date_new.append(date_new)
+
+users['created_date'] = created_date_new
+users['created_date'] = users['created_date'].dt.date
+
+mapping = {'STANDARD': 0, 'SILVER': 1, 'GOLD': 1}
+
+
+def map_plan(x):
+    if x in mapping:
+        return mapping[x]
+    else:
+        return x
+
+
+users['plan'] = users['plan'].apply(map_plan)
+
+users['attributes_notifications_marketing_push'] = users['attributes_notifications_marketing_push'].astype(int)
+users['attributes_notifications_marketing_email'] = users['attributes_notifications_marketing_email'].astype(int)
+
+
+users = users[users['num_contacts'] <= 800]
+contact_grp = []
+for contacts in users['num_contacts']:
+    if contacts == 0:
+        group = 'zero_cont_activity'
+    elif contacts in range(1, 99):
+        group = 'light_cont_activity'
+    else:
+        group = 'heavy_cont_activity'
+    contact_grp.append(group)
+users['contacts'] = contact_grp
+
+months_active = []
+for s in users['created_date']:
+    active = (datetime.now().year-s.year)*12 + (datetime.now().month - s.month)
+    months_active.append(active)
+users['months_active'] = months_active
+
+users['notifications_per_month'] = users['notifications'] / users['months_active']
+users['transactions_per_month'] = users['transactions'] / users['months_active']
+
+
+# Inbounds and Outbounds
+
+mapping = {'OUTBOUND': -1, 'INBOUND': 1}
+
+
+def map_direction(x):
+    if x in mapping:
+        return mapping[x]
+    else:
+        return x
+
+
+transactions['actual_amount'] = transactions['direction'].apply(map_direction) * transactions['amount_usd']
+
+
+b = transactions.groupby(['user_id', 'direction'])['actual_amount'].agg(['count', 'sum'])
+idx = pd.IndexSlice
+outbounds = b.loc[idx[:, 'OUTBOUND'], 'sum']
+inbounds = b.loc[idx[:, 'INBOUND'], 'sum']
+
+
+df1 = outbounds.reset_index()
+df2 = inbounds.reset_index()
+
+outbounds_full = []
+for user in users['user_id']:
+    if user in df1['user_id']:
+        outbound = df1['sum'][user]
+    else:
+        outbound = 0
+    outbounds_full.append(outbound)
+
+
+inbounds_full = []
+for user in users['user_id']:
+    if user in df2['user_id']:
+        inbound = df2['sum'][user]
+    else:
+        inbound = 0
+    inbounds_full.append(inbound)
+
+users['outbound_sum'] = outbounds_full
+users['inbound_sum'] = inbounds_full
+
+
+users['outbound_per_month'] = users['outbound_sum']/users['months_active']
+users['inbound_per_month'] = users['inbound_sum']/users['months_active']
+
+# Quarters and Balance
+quarters = []
+for i in transactions['created_date']:
+    if i.year == 2018:
+        q = ((i.month-1)//3) + 1
+    elif i.year == 2019:
+        q = 4
+    quarters.append(q)
+quarters = pd.Series(quarters)
+transactions['quarter'] = quarters
+transactions['quarter'] = transactions['quarter'].astype(int)
+
+c = transactions.groupby(['user_id', 'quarter'])['actual_amount'].agg(['count', 'sum'])
+
+
+q1 = c.loc[idx[:, 1], 'sum']
+q2 = c.loc[idx[:, 2], 'sum']
+q3 = c.loc[idx[:, 3], 'sum']
+q4 = c.loc[idx[:, 4], 'sum']
+
+q1 = q1.reset_index()
+q2 = q2.reset_index()
+q3 = q3.reset_index()
+q4 = q4.reset_index()
+
+q1_full = []
+for user in users['user_id']:
+    if user in q1['user_id']:
+        balance = q1['sum'][user]
+    else:
+        balance = 0
+    q1_full.append(balance)
+users['bal_var_q1'] = q1_full
+
+q2_full = []
+for user in users['user_id']:
+    if user in q2['user_id']:
+        balance = q2['sum'][user]
+    else:
+        balance = 0
+    q2_full.append(balance)
+users['bal_var_q2'] = q2_full
+
+q3_full = []
+for user in users['user_id']:
+    if user in q3['user_id']:
+        balance = q3['sum'][user]
+    else:
+        balance = 0
+    q3_full.append(balance)
+users['bal_var_q3'] = q3_full
+
+q4_full = []
+for user in users['user_id']:
+    if user in q4['user_id']:
+        balance = q4['sum'][user]
+    else:
+        balance = 0
+    q4_full.append(balance)
+users['bal_var_q4'] = q4_full
+users['total_bal_var'] = users['inbound_sum'] + users['outbound_sum']
+users['net_flow_ratio'] = users['inbound_sum'] / (-users['outbound_sum'] + 0.00000001)
+users['net_flow_ratio'] = users['net_flow_ratio'].fillna(0)
+
+users_cl = users.drop(columns=['birth_year', 'num_contacts', 'country', 'created_date', 'age'])
+
+# Oversampling
+
+from imblearn.over_sampling import SMOTE
+
+X = pd.get_dummies(users_cl.drop(columns='plan')).values
+y = users_cl['plan'].values
+
+smote = SMOTE()
+X_os, y_os = smote.fit_resample(X, y)
+
+print('Dataset size before oversampling:', len(X))
+print('Dataset size after oversampling:', len(X_os))
+
+# Train-test-split
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+
+
+from sklearn.preprocessing import StandardScaler
+
+scaler = StandardScaler()
+
+train_scaled = scaler.fit_transform(X_train)
+test_scaled = scaler.transform(X_test)
+
+from sklearn.ensemble import RandomForestClassifier
+
+rf = RandomForestClassifier()
+n_estimators = [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
+max_features = ['auto', 'sqrt']
+max_depth = [int(x) for x in np.linspace(10, 55, num=5)]
+max_depth.append(None)
+min_samples_split = [3, 8]
+min_samples_leaf = [1, 2]
+bootstrap = [True, False]
+grid = {'n_estimators': n_estimators,
+        'min_samples_split': min_samples_split, 'max_features': max_features,
+        'max_depth': max_depth, 'min_samples_leaf': min_samples_leaf,
+        'bootstrap': bootstrap}
+from sklearn.model_selection import GridSearchCV
+
+grid_search = GridSearchCV(rf, grid, cv=5, scoring='f1_macro', verbose=10)
+grid_search.fit(train_scaled, y_train)
+preds = grid_search.predict(test_scaled)
+from sklearn.metrics import classification_report
+print(classification_report(y_test, preds))
+grid_search.best_estimator_
+import pickle as pkl
+with open('model.pkl', 'wb') as f:
+    pkl.dump(grid_search.best_estimator_, f)
+#with open('model.pkl', 'rb') as f:
+    #model = pkl.load(f)
